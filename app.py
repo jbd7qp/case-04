@@ -6,7 +6,6 @@ from models import SurveySubmission, StoredSurveyRecord
 from storage import append_json_line
 
 app = Flask(__name__)
-# Allow cross-origin requests so the static HTML can POST from localhost or file://
 CORS(app, resources={r"/v1/*": {"origins": "*"}})
 
 @app.route("/ping", methods=["GET"])
@@ -27,15 +26,19 @@ def submit_survey():
     try:
         submission = SurveySubmission(**payload)
     except ValidationError as ve:
-        return jsonify({"error": "validation_error", "detail": ve.errors()}), 422
+        # Convert all validation errors to plain strings
+        error_messages = [
+            f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in ve.errors()
+        ]
+        return jsonify({"error": "validation_error", "detail": error_messages}), 422
 
     record = StoredSurveyRecord(
-        **submission.dict(),
+        **submission.model_dump(),
         received_at=datetime.now(timezone.utc),
         ip=request.headers.get("X-Forwarded-For", request.remote_addr or "")
     )
-    append_json_line(record.dict())
+    append_json_line(record.model_dump())
     return jsonify({"status": "ok"}), 201
 
 if __name__ == "__main__":
-    app.run(port=0, debug=True)
+    app.run(port=5000, debug=True)
